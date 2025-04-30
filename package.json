@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "build": "bash build.sh",
     "start": "node server.cjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
