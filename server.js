@@ -82,6 +82,9 @@ app.post('/api/transcribe', async (req, res) => {
   }
 });
 
+app.get('*', async(req, res, next) => {
+  res.send('server live');
+})
 
 app.listen(process.env.PORT || 3000, ()=> {
   console.log(`listening on ${process.env.PORT || 3000}`)
