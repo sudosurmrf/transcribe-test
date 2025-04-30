@@ -45,7 +45,7 @@ app.post('/api/transcribe', async (req, res, next) => {
     await downloadFile(url, videoPath);
 
     await new Promise((resolve, reject) => {
-      exec(`whisper "${videoPath}" --model base --output_dir ${outputDir} --output_format txt --output_name ${id}`,
+      exec(`whisper "${videoPath}" --model base --output_dir ${outputDir} --output_format txt`,
         (err, stdout, stderr) => {
           if(err) reject(err);
           else resolve();
