@@ -1,23 +1,21 @@
-import express from 'express';
-import fs from 'fs/promises';
-import { createWriteStream } from 'fs';
-import { exec } from 'child_process';
-import { v4 as uuid } from 'uuid';
-import path from 'path';
-import { pipeline } from 'stream/promises';
-import http from 'http';
-import https from 'https';
-import { fileURLToPath } from 'url';
+// server.cjs
 
+const express           = require('express');
+const fs                = require('fs/promises');
+const { createWriteStream } = require('fs');
+const { exec }          = require('child_process');
+const { v4: uuid }      = require('uuid');
+const path              = require('path');
+const { pipeline }      = require('stream/promises');
+const http              = require('http');
+const https             = require('https');
+const { URL }           = require('url');
 
 const app = express();
 app.use(express.json());
 
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname  = path.dirname(__filename);
-const TEMP_DIR   = path.join(__dirname, 'tmp');
-await fs.mkdir(TEMP_DIR, { recursive: true });
+// Use Node's built-in __dirname
+const TEMP_DIR = path.join(__dirname, 'tmp');
 
 async function downloadFile(fileUrl, outputPath) {
   const { protocol } = new URL(fileUrl);
@@ -37,21 +35,21 @@ async function downloadFile(fileUrl, outputPath) {
 
 app.post('/api/transcribe', async (req, res) => {
   const { url } = req.body;
-  const { pathname } = new URL(url);         
-  const id = uuid();
-  const ext= path.extname(pathname) || '.mp4';
-  const videoPath  = path.join(TEMP_DIR, `${id}${ext}`);  
-  console.log('about to download into:', videoPath);
+  if (!url) return res.status(400).json({ error: 'Missing "url" in body' });
 
-  const outputDir = path.join(TEMP_DIR, `output-${id}`);
+  const { pathname } = new URL(url);
+  const id   = uuid();
+  const ext  = path.extname(pathname) || '.mp4';
+  const videoPath    = path.join(TEMP_DIR, `${id}${ext}`);
+  const outputDir    = path.join(TEMP_DIR, `output-${id}`);
   const transcriptPath = path.join(outputDir, `${id}.txt`);
+
+  console.log('about to download into:', videoPath);
 
   try {
     await downloadFile(url, videoPath);
-
     await fs.mkdir(outputDir, { recursive: true });
 
-    // run whisper
     await new Promise((resolve, reject) => {
       const cmd = `whisper "${videoPath}" --model tiny --output_dir "${outputDir}" --output_format txt`;
       exec(cmd, (err, stdout, stderr) => {
@@ -64,10 +62,9 @@ app.post('/api/transcribe', async (req, res) => {
       });
     });
 
-    // attempt to access the transcript txt file
-    await fs.access(transcriptPath); 
+    // ensure transcript exists
+    await fs.access(transcriptPath);
 
-    // read file and return in json.
     const transcript = await fs.readFile(transcriptPath, 'utf-8');
     res.status(201).json({ transcript });
 
@@ -76,16 +73,21 @@ app.post('/api/transcribe', async (req, res) => {
     res.status(500).json({ error: err.message });
 
   } finally {
-    //file cleanup for later
+    // cleanup
     await fs.rm(videoPath, { force: true }).catch(() => {});
-    await fs.rm(outputDir, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(outputDir,   { recursive: true, force: true }).catch(() => {});
   }
 });
 
-// app.get('*', async(req, res, next) => {
-//   res.send('server live');
-// })
+const PORT = process.env.PORT || 3000;
 
-app.listen(process.env.PORT || 3000, ()=> {
-  console.log(`listening on ${process.env.PORT || 3000}`)
-});
+// wrap mkdir + listen in async IIFE
+(async () => {
+  try {
+    await fs.mkdir(TEMP_DIR, { recursive: true });
+    app.listen(PORT, () => console.log(`listening on ${PORT}`));
+  } catch (err) {
+    console.error('Startup error:', err);
+    process.exit(1);
+  }
+})();
